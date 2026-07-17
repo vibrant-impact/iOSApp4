@@ -9,6 +9,7 @@ import SwiftUI
 
 struct AppRootView: View {
     @StateObject private var viewModel = AmbientViewModel()
+    @State private var isDiscoverSheetOpen: Bool = false
     
     var body: some View {
         let theme = AppTheme.current(for: viewModel.params.scale)
@@ -24,6 +25,7 @@ struct AppRootView: View {
                     // HEADER SECTION
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
+                            
                             HStack(spacing: 8) {
                                 Image(systemName: "radio.fill")
                                     .foregroundColor(theme.accentColor)

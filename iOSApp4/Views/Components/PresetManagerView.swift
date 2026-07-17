@@ -15,6 +15,7 @@ struct PresetManagerView: View {
     enum PresetTab {
         case presets
         case saved
+        case community
     }
     
     // MARK: - Curated Factory Presets Listing
@@ -32,19 +33,19 @@ struct PresetManagerView: View {
         
         VStack(alignment: .leading, spacing: 16) {
             // MARK: - Header & Tab Switcher
-            HStack {
+            VStack(alignment: .leading, spacing: 12) {
                 Label("Saved Playlists", systemImage: "folder.badge.plus")
                     .font(.subheadline)
                     .bold()
                     .foregroundColor(currentTheme.accentColor)
                 
-                Spacer()
-                
-                // Segmented Layout Bar
+                // Segmented Layout Bar - Now stretching full width below the title!
                 HStack(spacing: 4) {
                     TabButton(text: "Curated", isActive: activeTab == .presets) { activeTab = .presets }
                     TabButton(text: "My Saved (\(viewModel.savedScenes.count))", isActive: activeTab == .saved) { activeTab = .saved }
+                    TabButton(text: "Community", isActive: activeTab == .community) { activeTab = .community }
                 }
+                .frame(maxWidth: .infinity)
                 .padding(2)
                 .background(Color.black.opacity(0.3))
                 .cornerRadius(8)
@@ -61,6 +62,8 @@ struct PresetManagerView: View {
                     curatedPresetsView(theme: currentTheme)
                 case .saved:
                     userSavedPresetsView(theme: currentTheme)
+                case .community:
+                    communityPresetsView(theme: currentTheme)
                 }
             }
             .frame(maxHeight: 240) // Constrained bounds matching web max-h-56 container loops
@@ -186,7 +189,7 @@ struct PresetManagerView: View {
                                     statusBadge(theme: theme)
                                 }
                                 
-                                Button(action: { viewModel.deleteScene(id: scene.id) }) {
+                                Button(action: { viewModel.deleteScene(sceneId: scene.id) }) {
                                     Image(systemName: "trash")
                                         .font(.caption)
                                         .foregroundColor(.red.opacity(0.7))
@@ -198,6 +201,58 @@ struct PresetManagerView: View {
                         .cornerRadius(10)
                     }
                 }
+            }
+        }
+    }
+    
+    // MARK: - Community Scene Row Builder
+    @ViewBuilder
+    private func communityPresetsView(theme: AppTheme) -> some View {
+        ScrollView(.vertical, showsIndicators: true) {
+            VStack(spacing: 12) {
+                if viewModel.isLoadingCommunityScenes {
+                    // Active Loading State
+                    VStack(spacing: 16) {
+                        ProgressView()
+                            .progressViewStyle(CircularProgressViewStyle(tint: theme.accentColor))
+                        Text("Discovering soundscapes...")
+                            .font(.caption)
+                            .foregroundColor(.slate)
+                    }
+                    .padding(.top, 30)
+                    
+                } else if viewModel.communityScenes.isEmpty {
+                    // Graceful Empty or Network Error State
+                    VStack(spacing: 8) {
+                        Image(systemName: "icloud.slash")
+                            .font(.title2)
+                            .foregroundColor(.slate.opacity(0.4))
+                        Text("No community scenes found.")
+                            .font(.caption)
+                            .foregroundColor(.slate)
+                    }
+                    .padding(.top, 30)
+                    
+                } else {
+                    // Successful Data State
+                    ForEach(viewModel.communityScenes) { sceneItem in
+                        DiscoverCardView(
+                            sceneData: sceneItem,
+                            playAction: {
+                                viewModel.loadScene(sceneItem.params)
+                                viewModel.updateEngineParams()
+                            }
+                        )
+                    }
+                }
+            }
+            .padding(.horizontal, 4)
+            .padding(.vertical, 4)
+        }
+        .onAppear {
+            // Only fetch if we don't already have data, saving Firestore reads
+            if viewModel.communityScenes.isEmpty {
+                viewModel.fetchCommunityScenes()
             }
         }
     }
@@ -238,8 +293,9 @@ struct TabButton: View {
         Button(action: action) {
             Text(text)
                 .font(.system(size: 10, weight: isActive ? .bold : .medium, design: .monospaced))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
+                .padding(.horizontal, 4)
+                .padding(.vertical, 6)
+                .frame(maxWidth: .infinity) // Stretches the tabs to fill the bar evenly
                 .background(isActive ? Color.white.opacity(0.1) : Color.clear)
                 .foregroundColor(isActive ? .white : .slate)
                 .cornerRadius(6)

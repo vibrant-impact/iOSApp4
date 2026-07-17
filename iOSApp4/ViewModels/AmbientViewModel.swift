@@ -7,26 +7,79 @@
 
 import Foundation
 import Combine
+import FirebaseAuth
+import FirebaseFirestore
 
 class AmbientViewModel: ObservableObject {
     // MARK: - Published UI States
     @Published var params: SoundscapeParams = SoundscapeParams()
     @Published var isPlaying: Bool = false
     @Published var savedScenes: [SavedScene] = []
+    @Published var communityScenes: [SavedScene] = []
+    @Published var isLoadingCommunityScenes: Bool = false
     @Published var activeNoteName: String = ""
     @Published var activeNoteFrequency: Float = 0.0
     @Published var showWelcomeModal: Bool = true
+    @Published var currentUserId: String? = nil
     
     // MARK: - Internal Alogrithmic Properties
     private var currentWalkIndex: Int = 7 // Start in the middle of our 15-note scale
     private var melodyTimer: Timer?
-    private let userDefaultsKey = "ambient_saved_scenes"
     
     // MARK: - Audio Engine Reference Holder
     private var audioEngine = GenerativeAudioEngine()
     
+    // MARK: - Firestore Reference
+    private let db = Firestore.firestore()
+    
     init() {
-        loadSavedScenes()
+        authenticateSilentUser()
+    }
+    
+    func authenticateSilentUser() {
+        Auth.auth().signInAnonymously { [weak self] authResult, error in
+            if let signInError = error {
+                print("Failed to authenticate silently: \(signInError.localizedDescription)")
+                return
+            }
+            
+            if let validUser = authResult?.user {
+                self?.currentUserId = validUser.uid
+                print("Silent authentication successful. User ID: \(validUser.uid)")
+                
+                // Fetch cloud data immediately after successful login
+                self?.fetchCloudScenes()
+            }
+        }
+    }
+    
+    // Function to handle the Firestore query
+    func fetchCommunityScenes() {
+        isLoadingCommunityScenes = true
+        let db = Firestore.firestore()
+        
+        db.collection("communityScenes")
+            .order(by: "createdAt", descending: true)
+            .limit(to: 50)
+            .getDocuments { [weak self] snapshot, error in
+                guard let self = self else { return }
+                
+                // Ensure state updates happen on the main thread
+                DispatchQueue.main.async {
+                    self.isLoadingCommunityScenes = false // Turn off loader
+                    
+                    if let error = error {
+                        print("Error fetching community scenes: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    guard let documents = snapshot?.documents else { return }
+                    
+                    self.communityScenes = documents.compactMap { doc -> SavedScene? in
+                        try? doc.data(as: SavedScene.self)
+                    }
+                }
+            }
     }
     
     // MARK: - Core Playback Control
@@ -145,20 +198,40 @@ class AmbientViewModel: ObservableObject {
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedName.isEmpty else { return }
         
+        // Include the new isPublic boolean (defaulting to false for personal saves)
         let newScene = SavedScene(
             id: UUID().uuidString,
             name: cleanedName,
             params: params,
-            createdAt: Date().timeIntervalSince1970
+            createdAt: Date().timeIntervalSince1970,
+            isPublic: false
         )
         
+        // Optimistically update the UI immediately
         savedScenes.insert(newScene, at: 0)
-        saveToPersistentStorage()
+        
+        // Push to the cloud
+        saveSceneToCloud(newScene)
     }
     
-    func deleteScene(id: String) {
-        savedScenes.removeAll { $0.id == id }
-        saveToPersistentStorage()
+    func deleteScene(sceneId: String) {
+        guard let currentUserId = self.currentUserId else { return }
+        
+        // Remove from Firestore
+        db.collection("users")
+            .document(currentUserId)
+            .collection("savedScenes")
+            .document(sceneId)
+            .delete() { [weak self] error in
+                if let error = error {
+                    print("Error removing document: \(error.localizedDescription)")
+                } else {
+                    // Remove from local array on the main thread once confirmed
+                    DispatchQueue.main.async {
+                        self?.savedScenes.removeAll { $0.id == sceneId }
+                    }
+                }
+            }
     }
     
     func loadScene(_ sceneParams: SoundscapeParams) {
@@ -167,20 +240,68 @@ class AmbientViewModel: ObservableObject {
         // audioEngine?.updateParams(params)
     }
     
-    private func saveToPersistentStorage() {
-        if let encoded = try? JSONEncoder().encode(savedScenes) {
-            UserDefaults.standard.set(encoded, forKey: userDefaultsKey)
-        }
-    }
-    
-    private func loadSavedScenes() {
-        if let data = UserDefaults.standard.data(forKey: userDefaultsKey),
-           let decoded = try? JSONDecoder().decode([SavedScene].self, from: data) {
-            savedScenes = decoded
-        }
-    }
-    
     func updateEngineParams() {
         audioEngine.updateParams(from: params)
+    }
+    
+    // MARK: - Cloud Data Methods
+    
+    func saveSceneToCloud(_ scene: SavedScene) {
+        // Ensure we have a valid user ID before attempting to save
+        guard let currentUserId = self.currentUserId else {
+            print("Cannot save to cloud: No user authenticated.")
+            return
+        }
+        
+        // Convert the SoundscapeParams to a dictionary for Firestore
+        // Note: Make sure SoundscapeParams and SavedScene conform to Codable in their model files!
+        do {
+            let sceneData = try Firestore.Encoder().encode(scene)
+            
+            db.collection("users")
+                .document(currentUserId)
+                .collection("savedScenes")
+                .document(scene.id)
+                .setData(sceneData) { error in
+                    if let error = error {
+                        print("Error saving scene to cloud: \(error.localizedDescription)")
+                    } else {
+                        print("Scene successfully saved to cloud: \(scene.name)")
+                    }
+                }
+        } catch {
+            print("Error encoding scene data: \(error)")
+        }
+    }
+    
+    func fetchCloudScenes() {
+        guard let currentUserId = self.currentUserId else { return }
+        
+        db.collection("users")
+            .document(currentUserId)
+            .collection("savedScenes")
+            .order(by: "createdAt", descending: true)
+            .getDocuments { [weak self] snapshot, error in
+                
+                // Move the decoding onto the main thread to satisfy the MainActor isolation!
+                DispatchQueue.main.async {
+                    if let error = error {
+                        print("Error fetching cloud scenes: \(error.localizedDescription)")
+                        return
+                    }
+                    
+                    guard let documents = snapshot?.documents else { return }
+                    
+                    var fetchedScenes: [SavedScene] = []
+                    for document in documents {
+                        if let scene = try? document.data(as: SavedScene.self) {
+                            fetchedScenes.append(scene)
+                        }
+                    }
+                    
+                    // Update our published array
+                    self?.savedScenes = fetchedScenes
+                }
+            }
     }
 }
