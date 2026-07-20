@@ -19,17 +19,11 @@ struct PresetManagerView: View {
     }
     
     // MARK: - Curated Factory Presets Listing
-    // Replicates your exact curated scenes data arrays natively
-    private let curatedPresets: [(name: String, description: String, params: SoundscapeParams)] = [
-        ("Pacific Solitude", "Deep ocean swells with slow, spacious minor melodies, wind chimes, and trailing delays.", SoundscapeParams(oceanVolume: 0.9, droneVolume: 0.5, rainVolume: 0.1, harpVolume: 0.1, chimesVolume: 0.6, bowlsVolume: 0.5, fluteVolume: 0.3, melodySpeed: 2.0, melodyJumpiness: 1, melodyDrift: -0.1, scale: .aMinorPentatonic, octave: 3, lfoRate: 1.0/45.0, lfoDepth: 1200, delayTime: 1.2, delayFeedback: 0.75, delayMix: 0.6, masterVolume: 0.8)),
-        ("Cosmic Nebula", "Shining sweep filters, high speed LFOs, and sparkling wind chime walks.", SoundscapeParams(oceanVolume: 0.2, droneVolume: 0.7, rainVolume: 0.4, harpVolume: 0.0, chimesVolume: 0.8, bowlsVolume: 0.6, fluteVolume: 0.2, melodySpeed: 1.1, melodyJumpiness: 2, melodyDrift: 0.25, scale: .hirajoshi, octave: 4, lfoRate: 1.0/15.0, lfoDepth: 2200, delayTime: 0.6, delayFeedback: 0.65, delayMix: 0.55, masterVolume: 0.8)),
-        ("Zen Temple Garden", "Gentle water ripples, sparkling acoustic harp, and a perfectly balanced C Major Pentatonic melody.", SoundscapeParams(oceanVolume: 0.45, droneVolume: 0.2, rainVolume: 0.7, harpVolume: 0.4, chimesVolume: 0.5, bowlsVolume: 0.8, fluteVolume: 0.6, melodySpeed: 1.4, melodyJumpiness: 1, melodyDrift: 0.0, scale: .cMajorPentatonic, octave: 4, lfoRate: 1.0/30.0, lfoDepth: 800, delayTime: 1.0, delayFeedback: 0.85, delayMix: 0.7, masterVolume: 0.85)),
-        ("Dorian Rain Cathedral", "Heavy pouring textures matched with deep meditative harp arpeggios and dark Dorian chords.", SoundscapeParams(oceanVolume: 0.1, droneVolume: 0.85, rainVolume: 0.95, harpVolume: 0.7, chimesVolume: 0.2, bowlsVolume: 0.3, fluteVolume: 0.5, melodySpeed: 1.7, melodyJumpiness: 2, melodyDrift: -0.2, scale: .dDorian, octave: 3, lfoRate: 1.0/60.0, lfoDepth: 1500, delayTime: 0.8, delayFeedback: 0.8, delayMix: 0.5, masterVolume: 0.8)),
-        ("Astral Shimmer", "Cosmic Lydian melodies ascending with sweeping air textures and bright chime cascades.", SoundscapeParams(oceanVolume: 0.3, droneVolume: 0.4, rainVolume: 0.2, harpVolume: 0.2, chimesVolume: 0.7, bowlsVolume: 0.4, fluteVolume: 0.7, melodySpeed: 0.8, melodyJumpiness: 3, melodyDrift: 0.35, scale: .eLydian, octave: 4, lfoRate: 1.0/12.0, lfoDepth: 2500, delayTime: 0.4, delayFeedback: 0.5, delayMix: 0.5, masterVolume: 0.75))
-    ]
+    // Temporarily empty; to be redefined later
+    private let curatedPresets: [(name: String, description: String, parameters: SoundscapeParameters)] = []
     
     var body: some View {
-        let currentTheme = AppTheme.current(for: viewModel.params.scale)
+        let currentTheme = AppTheme.current(for: viewModel.parameters.scale)
         
         VStack(alignment: .leading, spacing: 16) {
             // MARK: - Header & Tab Switcher
@@ -38,6 +32,17 @@ struct PresetManagerView: View {
                     .font(.subheadline)
                     .bold()
                     .foregroundColor(currentTheme.accentColor)
+
+                // temp developer button to add community files
+                Button(action: {
+                    viewModel.seedCommunityScenes()
+                }) {
+                    Text("Seed Mock Community Data")
+                        .font(.caption)
+                        .padding()
+                        .background(Color.blue.opacity(0.2))
+                        .cornerRadius(8)
+                }
                 
                 // Segmented Layout Bar - Now stretching full width below the title!
                 HStack(spacing: 4) {
@@ -113,9 +118,9 @@ struct PresetManagerView: View {
             VStack(spacing: 8) {
                 ForEach(0..<curatedPresets.count, id: \.self) { idx in
                     let preset = curatedPresets[idx]
-                    let isLoaded = viewModel.params == preset.params
+                    let isLoaded = viewModel.parameters == preset.parameters
                     
-                    Button(action: { viewModel.loadScene(preset.params) }) {
+                    Button(action: { viewModel.loadScene(preset.parameters) }) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(preset.name)
@@ -169,10 +174,10 @@ struct PresetManagerView: View {
             ScrollView(.vertical, showsIndicators: true) {
                 VStack(spacing: 8) {
                     ForEach(viewModel.savedScenes) { scene in
-                        let isLoaded = viewModel.params == scene.params
+                        let isLoaded = viewModel.parameters == scene.parameters
                         
                         HStack {
-                            Button(action: { viewModel.loadScene(scene.params) }) {
+                            Button(action: { viewModel.loadScene(scene.parameters) }) {
                                 VStack(alignment: .leading, spacing: 2) {
                                     Text(scene.name)
                                         .font(.caption.bold())
@@ -239,8 +244,8 @@ struct PresetManagerView: View {
                         DiscoverCardView(
                             sceneData: sceneItem,
                             playAction: {
-                                viewModel.loadScene(sceneItem.params)
-                                viewModel.updateEngineParams()
+                                viewModel.loadScene(sceneItem.parameters)
+                                viewModel.updateEngineParameters()
                             }
                         )
                     }

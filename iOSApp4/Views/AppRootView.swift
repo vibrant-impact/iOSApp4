@@ -2,50 +2,50 @@
 //  AppRootView.swift
 //  iOSApp4
 //
-//  Created by stephanie otteson on 2026-07-12.
+//  Created by stephanie otteson on 2026-07-19.
 //
 
 import SwiftUI
 
 struct AppRootView: View {
-    @StateObject private var viewModel = AmbientViewModel()
+    @StateObject private var ambientViewModel = AmbientViewModel()
     @State private var isDiscoverSheetOpen: Bool = false
     
     var body: some View {
-        let theme = AppTheme.current(for: viewModel.params.scale)
+        let activeTheme = AppTheme.current(for: ambientViewModel.parameters.scale)
         
         ZStack {
             // Background Canvas Fluid Layer
-            theme.bgGradient
+            activeTheme.bgGradient
                 .ignoresSafeArea()
             
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 24) {
                     
-                    // HEADER SECTION
+                    // MARK: - Header Section
                     HStack {
                         VStack(alignment: .leading, spacing: 4) {
                             
                             HStack(spacing: 8) {
                                 Image(systemName: "radio.fill")
-                                    .foregroundColor(theme.accentColor)
-                                    .symbolEffect(.pulse, isActive: viewModel.isPlaying)
+                                    .foregroundColor(activeTheme.accentColor)
+                                    .symbolEffect(.pulse, isActive: ambientViewModel.isPlaying)
                                 
                                 Text("Generative Ambient")
                                     .font(.system(.title3, design: .default))
                                     .bold()
                                     .foregroundColor(.white)
                                 
-                                Text(theme.name)
+                                Text(activeTheme.name)
                                     .font(.system(.caption2, design: .monospaced))
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 2)
-                                    .background(theme.badgeBg)
-                                    .foregroundColor(theme.accentColor)
+                                    .background(activeTheme.badgeBg)
+                                    .foregroundColor(activeTheme.accentColor)
                                     .cornerRadius(6)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 6)
-                                            .stroke(theme.accentColor.opacity(0.3), lineWidth: 0.5)
+                                            .stroke(activeTheme.accentColor.opacity(0.3), lineWidth: 0.5)
                                     )
                             }
                             Text("Mathematical soundscapes generated on-the-fly using Markov walks.")
@@ -56,23 +56,15 @@ struct AppRootView: View {
                     }
                     .padding(.top, 16)
                     
-                    // VISUALIZER PREVIEW PIPELINE
-                    WaveformVisualizerView(
-                        activeNoteName: viewModel.activeNoteName,
-                        activeNoteFrequency: viewModel.activeNoteFrequency,
-                        lfoRate: viewModel.params.lfoRate,
-                        isPlaying: viewModel.isPlaying
-                    )
-                    
-                    // MASTER ACTION AUDIO TRIGGER PANEL
+                    // MARK: - Master Action Audio Trigger Panel
                     HStack(spacing: 16) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("Endless Generation Engine")
                                 .font(.system(.caption, design: .monospaced))
                                 .bold()
-                                .foregroundColor(theme.accentColor)
+                                .foregroundColor(activeTheme.accentColor)
                             
-                            Text(viewModel.isPlaying ? "Immersive audio is active" : "Initiate unique ambient audio")
+                            Text(ambientViewModel.isPlaying ? "Immersive audio is active" : "Initiate unique ambient audio")
                                 .font(.subheadline)
                                 .bold()
                                 .foregroundColor(.white)
@@ -80,32 +72,54 @@ struct AppRootView: View {
                         
                         Spacer()
                         
-                        Button(action: { viewModel.togglePlayback() }) {
-                            Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+                        Button(action: { ambientViewModel.togglePlayback() }) {
+                            Image(systemName: ambientViewModel.isPlaying ? "pause.fill" : "play.fill")
                                 .font(.title2)
                                 .foregroundColor(.black)
                                 .frame(width: 56, height: 56)
                                 .background(
                                     Circle()
-                                        .fill(viewModel.isPlaying ? Color.red : theme.accentColor)
+                                        .fill(ambientViewModel.isPlaying ? Color.red : activeTheme.accentColor)
                                 )
-                                .shadow(color: (viewModel.isPlaying ? Color.red : theme.accentColor).opacity(0.3), radius: 10)
+                                .shadow(color: (ambientViewModel.isPlaying ? Color.red : activeTheme.accentColor).opacity(0.3), radius: 10)
                         }
                     }
                     .padding(20)
                     .background(.ultraThinMaterial)
                     .cornerRadius(20)
                     
-                    // CONTROLLERS MATRIX
-                    VStack(spacing: 20) {
-                        // Soundscape Mixer Component Container
-                        SoundscapeMixerCard(params: $viewModel.params)
+                    // MARK: - Visualizer Stack
+                    VStack(spacing: 0) {
+                        // Original, beautiful particle visualizer
+                        WaveformVisualizerView(
+                            activeNoteName: ambientViewModel.activeNoteName,
+                            activeNoteFrequency: ambientViewModel.activeNoteFrequency,
+                            lfoRate: ambientViewModel.parameters.lfoRate,
+                            isPlaying: ambientViewModel.isPlaying
+                        )
                         
-                        // Scale / Algorithm Control Configuration
-                        MelodyEngineCard(params: $viewModel.params)
+                        // New continuous breathing waveform as a visual anchor
+                        ContinuousWaveformView(
+                            isEnginePlaying: ambientViewModel.isPlaying,
+                            activeNoteFrequency: ambientViewModel.activeNoteFrequency
+                        )
+                        .padding(.top, 8)
+                    }
+                    .padding()
+                    .background(Color.black.opacity(0.2)) // Shared backdrop to unite them
+                    .cornerRadius(20)
+                    
+                    // MARK: - Controllers Matrix
+                    VStack(spacing: 20) {
+                        
+                        // The unified console replaces the three scattered individual cards
+                        UnifiedControlConsoleView(parameters: $ambientViewModel.parameters)
+                        
+                        // Soundscape Mixer Component Container (Kept for the atmospheric canvas loops)
+                        SoundscapeMixerCard(ambientViewModel: ambientViewModel)
                         
                         // Preset Selector
-                        PresetManagerView(viewModel: viewModel)
+                        PresetManagerView(viewModel: ambientViewModel)
                     }
                 }
                 .padding(.horizontal)
@@ -113,8 +127,8 @@ struct AppRootView: View {
         }
         .environment(\.colorScheme, ColorScheme.dark) // Enforce crisp high-contrast dark palette
         // Watch parameter updates and sync them directly to the native audio hardware
-        .onChange(of: viewModel.params) { _, _ in
-            viewModel.updateEngineParams()
+        .onChange(of: ambientViewModel.parameters) { _, _ in
+            ambientViewModel.updateEngineParameters()
         }
     }
 }

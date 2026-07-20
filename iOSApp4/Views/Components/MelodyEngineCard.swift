@@ -8,7 +8,7 @@
 import SwiftUI
 
 struct MelodyEngineCard: View {
-    @Binding var params: SoundscapeParams
+    @Binding var parameters: SoundscapeParameters
     
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -22,7 +22,7 @@ struct MelodyEngineCard: View {
                     .font(.caption)
                     .foregroundColor(.slate)
                 
-                Picker("Scale Selection", selection: $params.scale) {
+                Picker("Scale Selection", selection: $parameters.scale) {
                     Text("C Major Pentatonic").tag(MusicalScale.cMajorPentatonic)
                     Text("A Minor Pentatonic").tag(MusicalScale.aMinorPentatonic)
                     Text("E Lydian (Cosmic)").tag(MusicalScale.eLydian)
@@ -36,7 +36,14 @@ struct MelodyEngineCard: View {
             }
             
             VStack(spacing: 12) {
-                MixerSliderRow(label: "Note Pace (Interval Delay)", icon: "timer", value: $params.melodySpeed, accentColor: .indigo)
+                MixerSliderRow(
+                    label: "Note Pace (Interval Delay)",
+                    icon: "timer",
+                    value: $parameters.melodySpeed,
+                    sliderRange: 0.15...3.0, // Expanded maximum internal scale
+                    displayDivisor: 3.0,     // Divides UI text output by 3
+                    accentColor: .indigo
+                )
             }
         }
         .padding()

@@ -56,8 +56,8 @@ struct DiscoverCardView: View {
                 
                 // Audio Parameter Tags
                 HStack(spacing: 8) {
-                    parameterTag(icon: "waveform.path", value: "Drift: \(String(format: "%.1f", sceneData.params.melodyDrift))")
-                    parameterTag(icon: "hare.fill", value: "Speed: \(String(format: "%.1f", sceneData.params.melodySpeed))")
+                    parameterTag(icon: "waveform.path", value: "Drift: \(String(format: "%.1f", sceneData.parameters.melodyDrift))")
+                    parameterTag(icon: "hare.fill", value: "Speed: \(String(format: "%.1f", sceneData.parameters.melodySpeed))")
                 }
             }
             .padding(24)

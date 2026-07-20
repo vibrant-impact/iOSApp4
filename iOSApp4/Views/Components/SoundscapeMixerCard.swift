@@ -7,58 +7,81 @@
 
 import SwiftUI
 
-struct SoundscapeMixerCard: View {
-    @Binding var params: SoundscapeParams
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Label("Soundscape Mixer", systemImage: "waveform.and.mic")
-                    .font(.subheadline)
-                    .bold()
-                    .foregroundColor(.emerald)
-                Spacer()
-                Text("Ambience")
-                    .font(.system(.caption2, design: .monospaced))
-                    .padding(.horizontal, 6)
-                    .background(Color.emerald.opacity(0.1))
-                    .cornerRadius(4)
-            }
-            
-            VStack(spacing: 12) {
-                MixerSliderRow(label: "Ocean Waves (Noise Swell)", icon: "waveform.path.ecg", value: $params.oceanVolume, accentColor: .blue)
-                MixerSliderRow(label: "Gentle Rain (Bandpass)", icon: "cloud.rain", value: $params.rainVolume, accentColor: .sky)
-                MixerSliderRow(label: "Harmonic Drone (Bass Pad)", icon: "wind", value: $params.droneVolume, accentColor: .amber)
-                MixerSliderRow(label: "Acoustic Harp (Plucks)", icon: "music.note", value: $params.harpVolume, accentColor: .pink)
-            }
-        }
-        .padding()
-        .background(Color.white.opacity(0.03))
-        .cornerRadius(16)
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.white.opacity(0.05), lineWidth: 1))
-    }
-}
+import SwiftUI
 
-struct MixerSliderRow: View {
-    let label: String
-    let icon: String
-    @Binding var value: Float
-    let accentColor: Color
+struct SoundscapeMixerCard: View {
+    @ObservedObject var ambientViewModel: AmbientViewModel
     
     var body: some View {
-        VStack(spacing: 4) {
-            HStack {
-                Label(label, systemImage: icon)
-                    .font(.caption)
-                    .foregroundColor(.slate)
-                Spacer()
-                Text("\(Int(value * 100))%")
-                    .font(.system(.caption, design: .monospaced))
-                    .bold()
-                    .foregroundColor(accentColor)
+        VStack(alignment: .leading, spacing: 24) {
+            Text("Atmosphere Mixer")
+                .font(.title2)
+                .fontWeight(.semibold)
+                .foregroundColor(.primary)
+                .padding(.bottom, 4)
+            
+            VStack(spacing: 16) {
+                // Ocean Waves
+                MixerSliderRow(
+                    label: "Ocean Waves",
+                    icon: "water.waves",
+                    value: $ambientViewModel.parameters.oceanVolume,
+                    accentColor: .blue
+                )
+                .onChange(of: ambientViewModel.parameters.oceanVolume) {
+                    ambientViewModel.updateEngineParameters()
+                }
+                
+                // Rainfall
+                MixerSliderRow(
+                    label: "Rainfall",
+                    icon: "cloud.rain",
+                    value: $ambientViewModel.parameters.rainVolume,
+                    accentColor: .teal
+                )
+                .onChange(of: ambientViewModel.parameters.rainVolume) {
+                    ambientViewModel.updateEngineParameters()
+                }
+                
+                // Deep Drone
+                MixerSliderRow(
+                    label: "Deep Drone",
+                    icon: "aqi.low",
+                    value: $ambientViewModel.parameters.droneVolume,
+                    accentColor: .purple
+                )
+                .onChange(of: ambientViewModel.parameters.droneVolume) {
+                    ambientViewModel.updateEngineParameters()
+                }
+                
+                // Djembe Rhythm
+                MixerSliderRow(
+                    label: "Djembe Rhythm",
+                    icon: "circle.grid.cross",
+                    value: $ambientViewModel.parameters.djembeVolume,
+                    accentColor: .orange
+                )
+                .onChange(of: ambientViewModel.parameters.djembeVolume) {
+                    ambientViewModel.updateEngineParameters()
+                }
+                
+                // Shaker
+                MixerSliderRow(
+                    label: "Shaker",
+                    icon: "sparkles",
+                    value: $ambientViewModel.parameters.shakerVolume,
+                    accentColor: .yellow
+                )
+                .onChange(of: ambientViewModel.parameters.shakerVolume) {
+                    ambientViewModel.updateEngineParameters()
+                }
             }
-            Slider(value: $value, in: 0...1)
-                .tint(accentColor)
         }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 20)
+                .fill(Color(UIColor.secondarySystemBackground))
+                .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
+        )
     }
 }

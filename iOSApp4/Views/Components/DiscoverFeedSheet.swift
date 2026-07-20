@@ -24,8 +24,8 @@ struct DiscoverFeedSheet: View {
                             DiscoverCardView(
                                 sceneData: sceneItem,
                                 playAction: {
-                                    viewModel.loadScene(sceneItem.params)
-                                    viewModel.updateEngineParams()
+                                    viewModel.loadScene(sceneItem.parameters)
+                                    viewModel.updateEngineParameters()
                                 }
                             )
                         }

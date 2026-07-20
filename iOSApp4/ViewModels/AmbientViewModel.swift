@@ -12,7 +12,7 @@ import FirebaseFirestore
 
 class AmbientViewModel: ObservableObject {
     // MARK: - Published UI States
-    @Published var params: SoundscapeParams = SoundscapeParams()
+    @Published var parameters: SoundscapeParameters = SoundscapeParameters()
     @Published var isPlaying: Bool = false
     @Published var savedScenes: [SavedScene] = []
     @Published var communityScenes: [SavedScene] = []
@@ -22,15 +22,19 @@ class AmbientViewModel: ObservableObject {
     @Published var showWelcomeModal: Bool = true
     @Published var currentUserId: String? = nil
     
-    // MARK: - Internal Alogrithmic Properties
-    private var currentWalkIndex: Int = 7 // Start in the middle of our 15-note scale
+    // MARK: - Internal Algorithmic Properties
+    private var currentWalkIndex: Int = 7
     private var melodyTimer: Timer?
+    
+    // Dynamic rhythm sequence to prevent robotic equal-interval timing
+    private let rhythmPatternArray: [Double] = [1.0, 0.5, 0.5, 2.0, 0.25, 0.25, 1.5]
+    private var currentRhythmIndex: Int = 0
     
     // MARK: - Audio Engine Reference Holder
     private var audioEngine = GenerativeAudioEngine()
     
     // MARK: - Firestore Reference
-    private let db = Firestore.firestore()
+    private let databaseReference = Firestore.firestore()
     
     init() {
         authenticateSilentUser()
@@ -47,26 +51,22 @@ class AmbientViewModel: ObservableObject {
                 self?.currentUserId = validUser.uid
                 print("Silent authentication successful. User ID: \(validUser.uid)")
                 
-                // Fetch cloud data immediately after successful login
                 self?.fetchCloudScenes()
             }
         }
     }
     
-    // Function to handle the Firestore query
     func fetchCommunityScenes() {
         isLoadingCommunityScenes = true
-        let db = Firestore.firestore()
         
-        db.collection("communityScenes")
+        databaseReference.collection("communityScenes")
             .order(by: "createdAt", descending: true)
             .limit(to: 50)
             .getDocuments { [weak self] snapshot, error in
                 guard let self = self else { return }
                 
-                // Ensure state updates happen on the main thread
                 DispatchQueue.main.async {
-                    self.isLoadingCommunityScenes = false // Turn off loader
+                    self.isLoadingCommunityScenes = false
                     
                     if let error = error {
                         print("Error fetching community scenes: \(error.localizedDescription)")
@@ -82,6 +82,46 @@ class AmbientViewModel: ObservableObject {
             }
     }
     
+    func seedCommunityScenes() {
+        let rainParameters = SoundscapeParameters(
+            oceanVolume: 0.1,
+            rainVolume: 0.9,
+            harpVolume: 0.2,
+            melodySpeed: 1.2
+        )
+        
+        let droneParameters = SoundscapeParameters(
+            rainVolume: 0.0, bowlsVolume: 0.6, droneVolume: 0.85,
+            melodySpeed: 0.5
+        )
+        
+        let mockScenes = [
+            SavedScene(
+                id: UUID().uuidString,
+                name: "Heavy Rain & Harp",
+                parameters: rainParameters,
+                createdAt: Date().timeIntervalSince1970,
+                isPublic: true
+            ),
+            SavedScene(
+                id: UUID().uuidString,
+                name: "Deep Meditation Bowls",
+                parameters: droneParameters,
+                createdAt: Date().timeIntervalSince1970,
+                isPublic: true
+            )
+        ]
+        
+        for scene in mockScenes {
+            do {
+                try databaseReference.collection("communityScenes").document(scene.id).setData(from: scene)
+                print("Successfully seeded community scene: \(scene.name)")
+            } catch let error {
+                print("Error uploading mock community scene to Firestore: \(error.localizedDescription)")
+            }
+        }
+    }
+    
     // MARK: - Core Playback Control
     func togglePlayback() {
         if isPlaying {
@@ -92,14 +132,13 @@ class AmbientViewModel: ObservableObject {
     }
     
     private func startEngine() {
-        audioEngine.start()
-        audioEngine.updateParams(from: params)
+        audioEngine.startAudioEngine()
+        audioEngine.updateParameters(from: parameters)
         
         isPlaying = true
         showWelcomeModal = false
         
-        // Seed initial walk index to middle register of chosen scale
-        currentWalkIndex = params.scale.frequencies.count / 2
+        currentWalkIndex = parameters.scale.frequencies.count / 2
         scheduleNextMelodyNote()
     }
     
@@ -107,7 +146,7 @@ class AmbientViewModel: ObservableObject {
         melodyTimer?.invalidate()
         melodyTimer = nil
         
-        audioEngine.stop()
+        audioEngine.pauseAudioEngine()
         
         isPlaying = false
         activeNoteName = ""
@@ -120,37 +159,39 @@ class AmbientViewModel: ObservableObject {
         
         guard isPlaying else { return }
         
-        // 1. Run our mathematical random walk matrix calculation
         currentWalkIndex = getNextRandomWalkIndex(
             currentIndex: currentWalkIndex,
-            scaleLength: params.scale.frequencies.count,
-            jumpiness: params.melodyJumpiness,
-            drift: params.melodyDrift
+            scaleLength: parameters.scale.frequencies.count,
+            jumpiness: parameters.melodyJumpiness,
+            drift: parameters.melodyDrift
         )
         
-        // 2. Extract note values safely
-        let scaleFrequencies = params.scale.frequencies
-        let scaleNotes = params.scale.notes
+        let scaleFrequencies = parameters.scale.frequencies
+        let scaleNotes = parameters.scale.notes
         
         if currentWalkIndex < scaleFrequencies.count {
-            let nextFreq = scaleFrequencies[currentWalkIndex]
-            let nextName = scaleNotes[currentWalkIndex]
+            let nextFrequency = scaleFrequencies[currentWalkIndex]
+            let nextNoteName = scaleNotes[currentWalkIndex]
             
-            // 3. Update main thread UI bindings for our visual ripples
             DispatchQueue.main.async {
-                self.activeNoteFrequency = nextFreq
-                self.activeNoteName = nextName
+                self.activeNoteFrequency = nextFrequency
+                self.activeNoteName = nextNoteName
             }
             
-            // 4. Fire voice node trigger inside our engine graph
-            audioEngine.playSynthNote(frequency: nextFreq)
+            audioEngine.playGenerativeNote(frequency: nextFrequency)
         }
         
-        // 5. Add organic micro-timing humanization interval drift (+/- 25ms)
-        let microDelay = Float.random(in: -0.025...0.025)
-        let nextInterval = Double(max(0.15, params.melodySpeed + microDelay))
+        // Calculate dynamic rhythm logic
+        let baseRhythmMultiplier = rhythmPatternArray[currentRhythmIndex]
+        currentRhythmIndex = (currentRhythmIndex + 1) % rhythmPatternArray.count
         
-        melodyTimer = Timer.scheduledTimer(withTimeInterval: nextInterval, repeats: false) { [weak self] _ in
+        let microDelay = Float.random(in: -0.025...0.025)
+        
+        // Multiply the user's melody speed by the sequence array to create rhythmic breathing
+        let calculatedInterval = (Double(parameters.melodySpeed) * baseRhythmMultiplier) + Double(microDelay)
+        let nextIntervalDuration = max(0.15, calculatedInterval)
+        
+        melodyTimer = Timer.scheduledTimer(withTimeInterval: nextIntervalDuration, repeats: false) { [weak self] _ in
             self?.scheduleNextMelodyNote()
         }
     }
@@ -164,15 +205,14 @@ class AmbientViewModel: ObservableObject {
         var possibleIndices: [(index: Int, weight: Float)] = []
         
         for offset in -jumpiness...jumpiness {
-            let targetIdx = currentIndex + offset
+            let targetIndex = currentIndex + offset
             
-            if targetIdx >= 0 && targetIdx < scaleLength {
-                // Match your exact web equation modeling: exponential weights with low index 0 weight
+            if targetIndex >= 0 && targetIndex < scaleLength {
                 let baseWeight: Float = offset == 0 ? 0.1 : exp(-Float(abs(offset)) / 1.5)
                 let driftMultiplier = 1.0 + (drift * Float(offset))
-                let weight = baseWeight * max(0.01, driftMultiplier)
+                let calculatedWeight = baseWeight * max(0.01, driftMultiplier)
                 
-                possibleIndices.append((index: targetIdx, weight: weight))
+                possibleIndices.append((index: targetIndex, weight: calculatedWeight))
             }
         }
         
@@ -181,11 +221,11 @@ class AmbientViewModel: ObservableObject {
         }
         
         let totalWeight = possibleIndices.reduce(0.0) { $0 + $1.weight }
-        var randomVal = Float.random(in: 0...totalWeight)
+        var randomValue = Float.random(in: 0...totalWeight)
         
         for item in possibleIndices {
-            randomVal -= item.weight
-            if randomVal <= 0 {
+            randomValue -= item.weight
+            if randomValue <= 0 {
                 return item.index
             }
         }
@@ -198,27 +238,22 @@ class AmbientViewModel: ObservableObject {
         let cleanedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !cleanedName.isEmpty else { return }
         
-        // Include the new isPublic boolean (defaulting to false for personal saves)
         let newScene = SavedScene(
             id: UUID().uuidString,
             name: cleanedName,
-            params: params,
+            parameters: parameters,
             createdAt: Date().timeIntervalSince1970,
             isPublic: false
         )
         
-        // Optimistically update the UI immediately
         savedScenes.insert(newScene, at: 0)
-        
-        // Push to the cloud
         saveSceneToCloud(newScene)
     }
     
     func deleteScene(sceneId: String) {
         guard let currentUserId = self.currentUserId else { return }
         
-        // Remove from Firestore
-        db.collection("users")
+        databaseReference.collection("users")
             .document(currentUserId)
             .collection("savedScenes")
             .document(sceneId)
@@ -226,7 +261,6 @@ class AmbientViewModel: ObservableObject {
                 if let error = error {
                     print("Error removing document: \(error.localizedDescription)")
                 } else {
-                    // Remove from local array on the main thread once confirmed
                     DispatchQueue.main.async {
                         self?.savedScenes.removeAll { $0.id == sceneId }
                     }
@@ -234,31 +268,29 @@ class AmbientViewModel: ObservableObject {
             }
     }
     
-    func loadScene(_ sceneParams: SoundscapeParams) {
-        params = sceneParams
-        // If engine is actively performing, sweep parameters smoothly in real time
-        // audioEngine?.updateParams(params)
+    func loadScene(_ sceneParameters: SoundscapeParameters) {
+        parameters = sceneParameters
     }
     
-    func updateEngineParams() {
-        audioEngine.updateParams(from: params)
+    func updateEngineParameters() {
+        audioEngine.updateParameters(from: parameters)
+        
+        // Push both the generative instrument and the base loop file updates
+        audioEngine.loadInstrumentSample(fileName: parameters.selectedInstrument.rawValue)
+        audioEngine.updateBaseMelody(audioFileName: parameters.selectedBaseMelodyLoop.audioFileName)
     }
     
     // MARK: - Cloud Data Methods
-    
     func saveSceneToCloud(_ scene: SavedScene) {
-        // Ensure we have a valid user ID before attempting to save
         guard let currentUserId = self.currentUserId else {
             print("Cannot save to cloud: No user authenticated.")
             return
         }
         
-        // Convert the SoundscapeParams to a dictionary for Firestore
-        // Note: Make sure SoundscapeParams and SavedScene conform to Codable in their model files!
         do {
             let sceneData = try Firestore.Encoder().encode(scene)
             
-            db.collection("users")
+            databaseReference.collection("users")
                 .document(currentUserId)
                 .collection("savedScenes")
                 .document(scene.id)
@@ -277,13 +309,12 @@ class AmbientViewModel: ObservableObject {
     func fetchCloudScenes() {
         guard let currentUserId = self.currentUserId else { return }
         
-        db.collection("users")
+        databaseReference.collection("users")
             .document(currentUserId)
             .collection("savedScenes")
             .order(by: "createdAt", descending: true)
             .getDocuments { [weak self] snapshot, error in
                 
-                // Move the decoding onto the main thread to satisfy the MainActor isolation!
                 DispatchQueue.main.async {
                     if let error = error {
                         print("Error fetching cloud scenes: \(error.localizedDescription)")
@@ -299,7 +330,6 @@ class AmbientViewModel: ObservableObject {
                         }
                     }
                     
-                    // Update our published array
                     self?.savedScenes = fetchedScenes
                 }
             }
